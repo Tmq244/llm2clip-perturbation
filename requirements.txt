@@ -1,0 +1,13 @@
+# Core dependencies for the CLIP vs LLM2CLIP semantic perturbation experiments.
+# Exact torch / CUDA build depends on your host GPU — install torch first per
+# https://pytorch.org/get-started/locally/ , then `pip install -r requirements.txt`.
+
+torch
+transformers
+pandas
+numpy
+matplotlib
+tqdm
+Pillow
+llm2vec          # required only by --model llm2clip
+bitsandbytes     # required only for --llm-load-in-8bit / --llm-load-in-4bit
