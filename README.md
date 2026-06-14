@@ -41,10 +41,11 @@ Clean-caption baseline cosine (`s_original_mean`): CLIP **0.2635** vs LLM2CLIP *
 
 ### Findings
 
-- **Clean alignment is stronger for LLM2CLIP.** Its image–caption cosine sits higher out of the box (0.282 vs 0.264), so it starts from a better-aligned embedding space.
-- **Object swaps are the cleanest signal.** Both models notice an object swap most of the time (positive-rate 0.94 / 0.95), but LLM2CLIP's similarity drops **~1.9× more** (Δ 0.067 vs 0.036) — sharper object-level semantics. Large *n* and high positive-rate on both sides make this the most defensible result.
-- **Color/spatial swaps are hard for both.** CLIP barely moves (Δ 0.006, positive-rate 0.63 — its 25th-percentile `delta` is ≤ 0). LLM2CLIP still responds ~3.7× more in relative terms (Δ 0.021, positive-rate 0.75), but in absolute terms both are near the floor: fine-grained attribute/spatial reasoning is the shared weak spot.
-- **Semantic distractors flip the picture.** When an unrelated caption is appended *with explicit "ignore"/"unrelated" labelling*, CLIP's similarity drops **more** (Δ 0.044 vs 0.030; 94% vs 75% of pairs affected). LLM2CLIP better preserves the target caption's similarity — evidence it exploits the natural-language instructions that CLIP's encoder cannot.
+The headline result is a desirable **robustness profile**: LLM2CLIP is *more tolerant of irrelevant noise* yet *more sensitive to meaningful semantic changes* than CLIP.
+
+- **Tolerant of irrelevant noise — semantic distractors.** When an unrelated caption is appended *with explicit "ignore"/"unrelated" labelling*, CLIP's similarity drops more (Δ 0.044 vs 0.030; 94% vs 75% of pairs affected). LLM2CLIP better preserves the target caption's similarity — it leverages the template cues ("unrelated description", "ignore the following") to filter out the irrelevant text, which CLIP's encoder cannot.
+- **Sensitive to meaningful changes — object & color/spatial swaps.** On object swaps LLM2CLIP's similarity drops about double (Δ 0.067 vs 0.036; both models notice it ~94–95% of the time). On color/spatial swaps it also drops more (0.021 vs 0.006), but in absolute terms *both* deltas are tiny (CLIP's 25th-percentile Δ ≤ 0) — fine-grained attribute/spatial reasoning remains a shared weak spot.
+- **Higher clean alignment.** LLM2CLIP's image–caption cosine sits higher out of the box (0.282 vs 0.264), so it starts from a better-aligned embedding space.
 
 Full numbers: [`summary.csv`](outputs/semantic_perturbation_eval/summary.csv) · delta distribution & per-template breakdown: [`figures_v2/`](outputs/semantic_perturbation_eval/figures_v2/) · write-ups: [`report.md`](outputs/semantic_perturbation_eval/report.md), [`docs/report_zh.md`](docs/report_zh.md) (中文).
 
@@ -52,6 +53,7 @@ Full numbers: [`summary.csv`](outputs/semantic_perturbation_eval/summary.csv) ·
 
 - **Different subsets per perturbation.** Object / color-spatial swaps apply only where a dictionary word matches (coverage 57% / 72%; distractor 100%), so each is scored on a different caption set. *Within-perturbation* CLIP-vs-LLM2CLIP comparisons use identical caption sets (the headline); *across-perturbation* comparisons are qualitative.
 - **Sensitivity, not retrieval.** `delta` is a per-pair semantic-sensitivity probe, not Recall@1/5/10. Adding distractor-pool retrieval is listed future work.
+- **Raw deltas, not normalized.** The two models sit on different similarity scales (clean baseline 0.264 vs 0.282), so deltas are compared as raw values; the *direction* of every comparison holds under relative-drop normalization, but precise multiples (e.g. "1.9×") are scale-dependent and meant qualitatively.
 - **Not size-controlled.** LLM2CLIP's text tower is Llama-3-8B (~8B params) vs CLIP's ~123M — this is a characterization study, not a fair architecture comparison.
 - **Lexicon.** Swaps use a hand-curated, English-only dictionary and replace only the first match per caption; POS-tag-driven / LLM-generated swaps are future work.
 

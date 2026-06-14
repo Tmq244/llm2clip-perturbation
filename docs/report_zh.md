@@ -29,7 +29,7 @@ delta = s_original - s_corrupted
 
 ### 1. 扰动敏感度
 
-![Sensitivity to perturbation](figures_v2/01_sensitivity_to_perturbation.png)
+![Sensitivity to perturbation](../outputs/semantic_perturbation_eval/figures_v2/01_sensitivity_to_perturbation.png)
 
 该图展示三种扰动下的平均 `delta`。可以看到：
 
@@ -39,7 +39,7 @@ delta = s_original - s_corrupted
 
 ### 2. 加扰动前后的相似度对比
 
-![Similarity original vs perturbed](figures_v2/02_similarity_original_vs_perturbed.png)
+![Similarity original vs perturbed](../outputs/semantic_perturbation_eval/figures_v2/02_similarity_original_vs_perturbed.png)
 
 该图直接比较 `s_original_mean` 和 `s_corrupted_mean`：
 
@@ -50,7 +50,7 @@ delta = s_original - s_corrupted
 
 ### 3. 扰动使相似度下降的样本比例
 
-![Positive delta rate](figures_v2/03_positive_delta_rate.png)
+![Positive delta rate](../outputs/semantic_perturbation_eval/figures_v2/03_positive_delta_rate.png)
 
 该图展示 `s_original > s_corrupted` 的样本比例：
 
@@ -62,7 +62,7 @@ delta = s_original - s_corrupted
 
 ### 4. Delta 分布
 
-![Delta distribution](figures_v2/04_delta_distribution_boxplot.png)
+![Delta distribution](../outputs/semantic_perturbation_eval/figures_v2/04_delta_distribution_boxplot.png)
 
 箱线图展示了每类扰动下 delta 的分布。相比只看均值，它能反映样本间差异：
 
@@ -72,7 +72,7 @@ delta = s_original - s_corrupted
 
 ### 5. Semantic distractor 不同模板的影响
 
-![Semantic distractor by template](figures_v2/05_semantic_distractor_by_template.png)
+![Semantic distractor by template](../outputs/semantic_perturbation_eval/figures_v2/05_semantic_distractor_by_template.png)
 
 该图按 5 个 semantic distractor 模板分别统计 `delta_mean`。这个图主要用于检查模板措辞是否影响结果。
 
@@ -101,15 +101,15 @@ delta = s_original - s_corrupted
 
 ## 主要结论
 
-1. LLM2CLIP 在原始 caption 上有更高的平均图文相似度，说明 clean caption 条件下图文对齐更强。
+核心结论是一个理想的**鲁棒性表现**：LLM2CLIP **对无关噪声更容忍**，同时**对有意义的语义变化更敏感**——这正是理想视觉语言模型应有的特性。
 
-2. LLM2CLIP 对 object swap 更敏感。物体替换后，LLM2CLIP 的相似度下降约为 CLIP 的 `1.89x`。
+1. **对无关噪声更容忍（semantic distractor）**：加入带「无关 / 忽略」标注的干扰 caption 后，CLIP 相似度下降更大（`delta = 0.0439` vs `0.0302`，受影响样本 `93.9%` vs `75.0%`）。LLM2CLIP 更好地保留目标 caption 的相似度——它可能利用模板中的指令信息（如 `unrelated`、`ignore`、`actual image shows`）过滤无关文本，而 CLIP 做不到。不过该结论需结合模板分组结果（见第 5 节）进一步验证，因为句子顺序和指令强度也会影响模型行为。
 
-3. LLM2CLIP 对 color/spatial swap 也更敏感，平均 delta 约为 CLIP 的 `3.67x`。不过这类扰动的绝对 delta 仍小于 object swap，说明颜色和空间关系仍是更细粒度、更困难的语义变化。
+2. **对有意义的语义变化更敏感（object & color/spatial swap）**：物体替换下 LLM2CLIP 相似度下降明显更大（`delta = 0.0671` vs `0.0356`，约翻倍；两模型都约 `94–95%` 样本下降）。颜色/空间替换下也更大（`0.0210` vs `0.0057`），但两者的绝对 delta 都很小（CLIP 的 25% 分位 delta ≤ 0），颜色/空间仍是共同短板。
 
-4. Semantic distractor 的结果和之前简单拼接 caption 的设定不同。在当前多模板、显式标注相关/无关句子的设置下，CLIP 的相似度下降更大，而 LLM2CLIP 保留了更高的 perturbed 相似度。这可能说明 LLM2CLIP 更能利用模板中的指令信息，例如 `unrelated`、`ignore`、`actual image shows` 等。
+3. **干净对齐更强**：原始 caption 上 LLM2CLIP 平均相似度更高（`0.2817` vs `0.2635`）。
 
-5. 因此，LLM2CLIP 的优势不仅体现在“更敏感”，也体现在它可能更能处理结构化文本提示。但这个结论需要结合模板分组结果进一步验证，因为不同模板中的句子顺序和指令强度可能会影响模型行为。
+> 补充说明：两个模型的相似度量纲不同（干净基线 `0.264` vs `0.282`），上面的 delta 按原始值比较；方向在按相对下降归一化后仍然成立，但“约翻倍”这类说法应理解为定性结论，而非精确倍数。
 
 ## 后续建议
 
