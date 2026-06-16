@@ -5,18 +5,34 @@ semantics of a caption — the objects, colors, and spatial relations it describ
 **CLIP** (`openai/clip-vit-large-patch14-336`) and **LLM2CLIP** (`microsoft/LLM2CLIP-Openai-L-14-336` +
 `microsoft/LLM2CLIP-Llama-3-8B-Instruct-CC-Finetuned`) are to controlled semantic corruptions of MSCOCO captions.
 
+## What is LLM2CLIP?
+
+[**LLM2CLIP**](https://github.com/microsoft/LLM2CLIP) (Huang et al., 2024) replaces CLIP's lightweight text encoder with a large language model, so caption understanding is driven by an LLM (Llama-3-8B) instead of CLIP's ~123M text tower. It is trained in two stages:
+
 <p align="center">
-  <img src="outputs/semantic_perturbation_eval/figures_v2/01_sensitivity_to_perturbation.png" width="740" alt="Sensitivity to perturbations">
+  <img src="docs/framework.png" width="640" alt="LLM2CLIP two-stage framework">
 </p>
 
-For each image–caption pair we compute:
+1. **Caption-contrastive LLM fine-tuning (Stage 1)** — turn an LLM into a caption embedding model via the LLM2Vec recipe (LoRA + mean pooling + bidirectional attention + supervised SimCSE on caption pairs).
+2. **Vision adaptation (Stage 2)** — the fine-tuned LLM (frozen) replaces CLIP's text encoder; a lightweight adaptor maps its features into the CLIP space, and the vision encoder + adaptor are fine-tuned with the CLIP contrastive loss.
+
+This project **evaluates** the released checkpoints — it does not train them.
+
+## Method
+
+For each image–caption pair:
 
 ```text
 delta = cosine(image_emb, text_emb(original_caption)) - cosine(image_emb, text_emb(corrupted_caption))
 ```
 
-A larger `delta` means the corruption lowered image–text similarity — i.e. the model noticed the semantic change.
-`positive_rate` is the fraction of pairs where `delta > 0`.
+A larger `delta` means the corruption lowered image–text similarity (the model noticed the change); `positive_rate` is the fraction of pairs with `delta > 0`. Three perturbations are applied to each caption:
+
+| Type | How it's built |
+|---|---|
+| **Object swap** | Replace a core object word, e.g. `horse → bicycle`, `dog → cat` |
+| **Color / spatial swap** | Replace a color word (`red → blue`) or spatial relation (`on → under`, `left of → right of`) |
+| **Semantic distractor** | Append another image's unrelated caption, wrapped in one of 5 instruction templates that label the relevant/irrelevant sentences |
 
 ## Results (MSCOCO 2014, 5k split)
 
@@ -29,14 +45,10 @@ A larger `delta` means the corruption lowered image–text similarity — i.e. t
 | CLIP | Color/spatial swap | 18131 | 0.0057 | 0.629 |
 | LLM2CLIP | Color/spatial swap | 18131 | 0.0210 | 0.753 |
 
-Clean-caption baseline cosine (`s_original_mean`): CLIP **0.2635** vs LLM2CLIP **0.2817**.
+Clean-caption baseline cosine: CLIP **0.2635** vs LLM2CLIP **0.2817**.
 
 <p align="center">
-  <img src="outputs/semantic_perturbation_eval/figures_v2/02_similarity_original_vs_perturbed.png" width="820" alt="Similarity before vs after perturbation">
-</p>
-
-<p align="center">
-  <img src="outputs/semantic_perturbation_eval/figures_v2/03_positive_delta_rate.png" width="620" alt="Positive delta rate by perturbation">
+  <img src="outputs/semantic_perturbation_eval/figures_v2/04_delta_distribution_boxplot.png" width="780" alt="Delta distribution by perturbation">
 </p>
 
 ### Findings
@@ -47,7 +59,7 @@ The headline result is a desirable **robustness profile**: LLM2CLIP is *more tol
 - **Sensitive to meaningful changes — object & color/spatial swaps.** On object swaps LLM2CLIP's similarity drops about double (Δ 0.067 vs 0.036; both models notice it ~94–95% of the time). On color/spatial swaps it also drops more (0.021 vs 0.006), but in absolute terms *both* deltas are tiny (CLIP's 25th-percentile Δ ≤ 0) — fine-grained attribute/spatial reasoning remains a shared weak spot.
 - **Higher clean alignment.** LLM2CLIP's image–caption cosine sits higher out of the box (0.282 vs 0.264), so it starts from a better-aligned embedding space.
 
-Full numbers: [`summary.csv`](outputs/semantic_perturbation_eval/summary.csv) · delta distribution & per-template breakdown: [`figures_v2/`](outputs/semantic_perturbation_eval/figures_v2/) · write-ups: [`report.md`](outputs/semantic_perturbation_eval/report.md), [`docs/report_zh.md`](docs/report_zh.md) (中文).
+Full numbers: [`summary.csv`](outputs/semantic_perturbation_eval/summary.csv) · full figure set: [`figures_v2/`](outputs/semantic_perturbation_eval/figures_v2/) · write-ups: [`report.md`](outputs/semantic_perturbation_eval/report.md), [`docs/report_zh.md`](docs/report_zh.md).
 
 ### Limitations & next steps
 
@@ -61,94 +73,34 @@ Full numbers: [`summary.csv`](outputs/semantic_perturbation_eval/summary.csv) ·
 
 ```
 llm2clip-perturbation/
-├── README.md
-├── LICENSE
-├── requirements.txt
-├── docs/                       # PDF report, slides, and the detailed Chinese analysis
-├── scripts/                    # the experiment pipeline (4 scripts)
-│   ├── build_caption_perturbations.py
-│   ├── evaluate_semantic_perturbations.py
-│   ├── make_semantic_perturbation_report.py
-│   └── plot_semantic_perturbation_figures.py
-├── outputs/                    # committed results: CSVs, figures/, figures_v2/, summary
-├── datasets/                   # NOT committed — download locally (see below)
-└── models/                     # NOT committed — download locally (see below)
+├── scripts/     # build_caption_perturbations · evaluate_semantic_perturbations · make_report · plot_figures
+├── outputs/     # committed results: CSVs, figures/, figures_v2/, summary, report.md
+├── docs/        # framework figure, PDF report + slides, detailed Chinese analysis
+├── datasets/    # NOT committed — download locally
+└── models/      # NOT committed — download locally
 ```
 
-## Setup
+## Reproduce
 
-Requires **Python 3.10** and a CUDA GPU. The CLIP runs are light; the LLM2CLIP-Llama-3-8B text encoder needs
-roughly 16 GB+ of VRAM (use `--llm-load-in-4bit` to fit on less).
+Requires **Python 3.10** + a CUDA GPU (the LLM2CLIP-Llama-3-8B text encoder needs ~16 GB VRAM, or use `--llm-load-in-4bit`).
 
 ```bash
-# 1. torch first (pick the build matching your CUDA version):
-pip install torch --index-url https://download.pytorch.org/whl/cu121
-
-# 2. everything else:
+pip install torch --index-url https://download.pytorch.org/whl/cu121   # match your CUDA build first
 pip install -r requirements.txt
 ```
 
-### Data & models (not committed)
-
-The scripts default to local paths under `datasets/` and `models/`. Download them so the layout matches the defaults,
-or override every path with CLI flags.
-
-**Dataset** — MSCOCO 2014 5k image-text retrieval split ([`MMInstruction/MSCOCO_2014_5k_test_image_text_retrieval`](https://huggingface.co/datasets/MMInstruction/MSCOCO_2014_5k_test_image_text_retrieval)):
-
-```
-datasets/mscoco_2014_5k_test_image_text_retrieval/
-├── test_5k_mscoco_2014.csv
-└── images_mscoco_2014_5k_test/        # extracted from images_mscoco_2014_5k_test.zip
-```
-
-**Models** ([`openai/clip-vit-large-patch14-336`](https://huggingface.co/openai/clip-vit-large-patch14-336),
-[`microsoft/LLM2CLIP-Openai-L-14-336`](https://huggingface.co/microsoft/LLM2CLIP-Openai-L-14-336),
-[`microsoft/LLM2CLIP-Llama-3-8B-Instruct-CC-Finetuned`](https://huggingface.co/microsoft/LLM2CLIP-Llama-3-8B-Instruct-CC-Finetuned),
-[`McGill-NLP/LLM2Vec-Meta-Llama-3-8B-Instruct-mntp`](https://huggingface.co/McGill-NLP/LLM2Vec-Meta-Llama-3-8B-Instruct-mntp) as the base text encoder weights):
-
-```
-models/clip-vit-large-patch14-336/
-models/LLM2CLIP-Openai-L-14-336/
-models/LLM2CLIP-Llama-3-8B-Instruct-CC-Finetuned/
-models/LLM2Vec-Meta-Llama-3-8B-Instruct-mntp/
-```
-
-> Note: the LLM2CLIP evaluator loads its image processor from the local CLIP model dir (LLM2CLIP reuses the standard
-> CLIP image preprocessor); the path is overridable via `--clip-model-path`. Keep that folder present by default.
-
-## Pipeline
-
-Run from the repo root. Steps 1, 3, 4 are CPU-only and fast; step 2 is the GPU evaluation.
+**Data & models** are gitignored. Download the [MSCOCO 2014 5k retrieval split](https://huggingface.co/datasets/MMInstruction/MSCOCO_2014_5k_test_image_text_retrieval) and the checkpoints — [CLIP-L/14-336](https://huggingface.co/openai/clip-vit-large-patch14-336), [LLM2CLIP-Openai-L-14-336](https://huggingface.co/microsoft/LLM2CLIP-Openai-L-14-336), [LLM2CLIP-Llama-3-8B-Instruct-CC-Finetuned](https://huggingface.co/microsoft/LLM2CLIP-Llama-3-8B-Instruct-CC-Finetuned), [LLM2Vec-Meta-Llama-3-8B-Instruct-mntp](https://huggingface.co/McGill-NLP/LLM2Vec-Meta-Llama-3-8B-Instruct-mntp) (base text-encoder weights) — under `datasets/` and `models/`, or override every path with CLI flags. (The LLM2CLIP evaluator loads its image processor from the CLIP model dir, overridable via `--clip-model-path`.)
 
 ```bash
-# 1. Build the perturbation sets from the MSCOCO captions.
-python scripts/build_caption_perturbations.py
-
-# 2. Evaluate CLIP and/or LLM2CLIP. Use --limit N for a quick smoke test.
-python scripts/evaluate_semantic_perturbations.py --model both
-#   e.g. quick CLIP-only test:
-#   python scripts/evaluate_semantic_perturbations.py --model clip --limit 50 --skip-original-caption
-
-# 3. Generate the summary table, figures/, and English report.md.
-python scripts/make_semantic_perturbation_report.py
-
-# 4. Generate the focused figures_v2/ set (boxplots, per-template breakdown).
-python scripts/plot_semantic_perturbation_figures.py
+python scripts/build_caption_perturbations.py            # 1. build perturbations (CPU)
+python scripts/evaluate_semantic_perturbations.py --model both   # 2. evaluate (GPU; --limit 50 to smoke-test)
+python scripts/make_semantic_perturbation_report.py      # 3. summary + figures/ + report.md
+python scripts/plot_semantic_perturbation_figures.py     # 4. focused figures_v2/ set
 ```
 
-### Perturbation types
+## Further reading
 
-| Type | How it's built |
-|---|---|
-| **Object swap** | Replace a core object word, e.g. `horse → bicycle`, `dog → cat` |
-| **Color / spatial swap** | Replace a color word (`red → blue`) or spatial relation (`on → under`, `left of → right of`) |
-| **Semantic distractor** | Append another image's unrelated caption, wrapped in one of 5 instruction templates that label the relevant/irrelevant sentences |
-
-## More results & figures
-
-- [`figures_v2/`](outputs/semantic_perturbation_eval/figures_v2/) — sensitivity, before/after similarity, positive-delta rate, delta distribution, per-template breakdown
-- [`report.md`](outputs/semantic_perturbation_eval/report.md) — generated English report
-- [`docs/`](docs/) — `llm2clip_report.pdf`, `presentation.pdf`, and the detailed [`report_zh.md`](docs/report_zh.md)
+[`docs/`](docs/) contains `llm2clip_report.pdf` and `presentation.pdf`; see also [`report.md`](outputs/semantic_perturbation_eval/report.md) and [`docs/report_zh.md`](docs/report_zh.md).
 
 ## License
 
